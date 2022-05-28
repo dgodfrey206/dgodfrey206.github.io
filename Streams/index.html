@@ -1,0 +1,159 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>C++ Streams</title>
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:700' rel='stylesheet' type='text/css'>
+    <link href='http://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic,700italic' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" href="styles/monokai_sublime.css">
+    <link rel="stylesheet" href="styles/index.css">
+    <script src="scripts/highlight.pack.js"></script>
+    <script>hljs.initHighlightingOnLoad();</script>
+    <script type="text/javascript" src="scripts/jquery-1.11.1.min.js"></script>
+</head>
+<body>
+<div id="content">
+    <div id="title">C++ Streams</div>
+
+    <div id="links">
+        <a href="https://github.com/dgodfrey206/Streams/archive/master.zip">Download Streams</a>
+        <span class="sep">|</span>
+        <a href="https://github.com/dgodfrey206/Streams">Github Page</a>
+        <span class="sep">|</span>
+        <a href="api.html">API Reference</a>
+    </div>
+
+    <p>Streams is a C++14 library that provides lazy evaluation and functional-style
+    transformations on the data, to ease the use of C++ standard library containers
+    and algorithms. Streams support many common functional operations such as
+    map, filter, and reduce, as well as various others. Please see the
+    <a href="api.html">API reference</a> for complete details.
+
+    <p>To use streams <a target="blank" href="https://github.com/jscheiny/Streams">download</a>
+    them from Github. To use, simply <span class="inline">#include "Stream.h"</span>.
+    Streams require <b>C++14</b> to compile. Streams consist only of header files, so you
+    shouldn't have to modify your build process to use them. </p>
+
+    <h2 id="intro">Examples</h2>
+
+    (Note: In all of the examples, assume we are using the namespaces <span class="inline">stream</span> and <span class="inline">stream::op</span>).
+
+    Summing the first 10 squares:
+
+    <pre><code lang="C++">int total = MakeStream::counter(1)
+    | map_([] (int x) { return x * x; })
+    | limit(10)
+    | sum();</code></pre>
+
+    Investigating the collatz conjecture:
+
+    <pre><code lang="C++">auto next_collatz = [] (int n) {
+    if(n % 2 == 0)
+        return n / 2;
+    else
+        return 3 * n + 1;
+};
+
+int distance = MakeStream::generate(1124, next_collatz)
+    | take_while([] (int n) { return n != 1; })
+    | count();</code></pre>
+
+    Running a coin flip experiment:
+
+    <pre><code lang="C++">int heads = MakeStream::coin_flips() // Uniform random bools
+    | limit(1000) // Take the first 1000 coin flips
+    | filter()    // Take only the true ones (heads)
+    | count();</code></pre>
+
+    Extracting values from objects and handling them:
+
+    <pre><code lang="C++">std::vector&lt;Widget&gt; widgets = /* ... */
+std::set&lt;int&gt; ids = MakeStream::from(widgets)
+    | map_(&Widget::getId)
+    | to_set();</code></pre>
+
+    Getting summary statistics from a set of data:
+
+    <pre><code lang="C++">std::vector&lt;Widget&gt; widgets = /* ... */
+auto stats = MakeStream::from(widgets)
+    | map_(&Widget::getValue)
+    | reducers::SummaryStats&lt;double&gt;().reducer();
+std::cout &lt;&lt; "Mean   = " &lt;&lt; stats.mean()   &lt;&lt; "\n"
+          &lt;&lt; "StdDev = " &lt;&lt; stats.stddev() &lt;&lt; "\n"
+          &lt;&lt; "Min    = " &lt;&lt; stats.min()    &lt;&lt; "\n"
+          &lt;&lt; "Max    = " &lt;&lt; stats.max()    &lt;&lt; "\n"
+          &lt;&lt; "Number = " &lt;&lt; stats.num()    &lt;&lt; std::endl;</code></pre>
+
+    Set operations. Instead of having to do this:
+
+    <pre><code lang="c++">std::set&lt;Gadget&gt; left = /* ... */
+std::set&lt;Gadget&gt; right = /* ... */
+std::set&lt;Gadget&gt; result;
+
+std::set_intersection(left.begin(), left.end(),
+                      right.begin(), right.end()
+                      std::inserter(result, result.end());</code></pre>
+
+    We can now do this much more readably:
+
+    <pre><code lang="C++">std::set&lt;Gadget&gt; left = /* ... */
+std::set&lt;Gadget&gt; right = /* ... */
+
+std::set&lt;Gadget&gt; result = Stream&lt;Gadget&gt;(left)
+    | intersect_with(Stream&lt;Gadget&gt;(right))
+    | to_set();</code></pre>
+
+    Vector operations:
+
+    <pre><code lang="C++">std::vector&lt;double&gt; vec1 = /* ... */
+std::vector&lt;double&gt; vec2 = /* ... */
+
+auto stream = [](auto& x) {
+    return MakeStream::from(x);
+};
+
+auto sum = (stream(vec1) + stream(vec2)) | to_vector();
+auto scale = (stream(vec1) * 5) | to_vector();
+auto translate = (stream(vec1) + 10) | to_vector();
+double dot_product = (stream(vec1) * stream(vec2)) | sum();</code></pre>
+
+    Operator composition:
+
+    <pre><code lang="C++">auto square = map_([](auto&& x) { return x * x; });
+MakeStream::range(1, 5) | square | print_to(std::cout) // 1 4 9 16
+
+auto square_and_sum = square | sum();
+int result = MakeStream::range(1, 4) | square_and_sum; // 14
+
+auto every_nth = [](int n) {
+    return zip_with(MakeStream::counter(0))
+         | filter([=](const auto& tup) {
+            return std::get<1>(tup) % n == 0;
+        })
+         | map_([](auto&& tup) {
+            return std::get<0>(tup);
+        });
+};
+
+MakeStream::from({1, 3, 8, 4, 7})
+    | every_nth(2)
+    | print_to(std::cout); // 1 8 7</code></pre>
+
+    <p>
+    For more complete information, see the <a href="api.html">API reference</a>.
+    </p>
+
+    <p>
+    C++ Streams is developed by <a href="http://scheinerman.net/jonah">Jonah Scheinerman</a> and is always
+    looking to improve. Please <a href="mailto:jonah@scheinerman.net">contact</a> me if you have question,
+    concerns, bugs, or ideas on how to make streams even better.</p>
+
+
+    <p class="license">C++ Streams are distributed under the <a href="http://opensource.org/licenses/MIT" target="blank">MIT open source license</a>.</p>
+
+    <p class="license">Copyright &copy; 2022 by David Godfrey</p>
+</div>
+
+</body>
+</html>
+
