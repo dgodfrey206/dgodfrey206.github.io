@@ -1,0 +1,499 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>QtMinesweeper</title>
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:700' rel='stylesheet' type='text/css'>
+    <link href='http://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic,700italic' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" href="styles/monokai_sublime.css">
+    <link rel="stylesheet" href="styles/index.css">
+    <script src="scripts/highlight.pack.js"></script>
+    <script>hljs.initHighlightingOnLoad();</script>
+    <script type="text/javascript" src="scripts/jquery-1.11.1.min.js"></script>
+</head>
+<body>
+<div id="content">
+    <div id="title">QtMinesweeper</div>
+
+    <div id="links">
+        <a href="https://github.com/dgodfrey206/QtMinesweeper">Github Page</a>
+    </div>
+
+    The overall code structure, the game logic class and the game interface class are separated, and the idea of ​​MVC is adopted.
+
+    <h2 id="intro">1. The game structure</h2>
+
+    The game map is actually a two-dimensional matrix composed of squares, each of which stores numbers, mines or marks, and defines some game running state enumerations
+
+    <pre><code lang="C++">enum BlockState {
+      UN_DIG,
+      DIGGED,
+      MARKED,
+      BOMB,
+      WRONG_BOMB
+    };
+
+    struct MineBlock {
+      BlockState curState;
+      int valueFlag;
+    };
+
+    enum GameState {
+      PLAYING,
+      FAULT,
+      OVER,
+      WIN
+    };
+
+    enum GameLevel {
+      BASIC,
+      MEDIUM,
+      HARD
+    };
+
+    const int kRow = 15;
+    const int kCol = 20;
+    const int kMineCount = 50;
+    const int kTime = 0;
+    </code></pre>
+
+    <h2 id="intro">2. Create game logic</h2>
+    A game logic class includes maps, game states, etc., as well as some control functions
+
+    <pre><code lang="C++">class GameModel
+{
+public:
+    GameModel();
+    virtual ~GameModel();
+public:
+    void digMine(int m, int n);
+    void markMine(int m, int n);
+    void createGame(int row = kRow, int col = kCol, 
+                    int mineCount = kMineCount);
+    GameState checkGame();
+
+    void createGame(int row = kRow, int col = kCol, 
+                    int mineCount = kMineCount, 
+                    GameLevel level = MEDIUM);
+    void restartGame(); 
+    void checkGame(); 
+public:
+    std::vector&#60;std::vector&#60;MineBlock&#62;&#62; gameMap; 
+    int mRow; 
+    int mCol; 
+    int mineNumber; 
+
+    int totalMineNumber;
+    int curMineNumber;  
+    int timerSeconds; 
+
+    GameState gameState; 
+    GameLevel gameLevel;
+};
+    
+    </code></pre>
+
+    <h2 id="intro">3. Game logic</h2>
+    <h3>(1). Game Initialization</h3>
+
+    <pre><code lang="C++">void GameModel::createGame(int row, int col, int mineCount);</code></pre>
+
+    <ul>
+      <li>Mines are placed randomly</li>
+      <li>Count block numbers</li>
+    </ul>
+
+    <h3>(2) Mining mines</h3>
+    <pre><code lang="C++">void GameModel::digMine(int m, int n)
+{
+    if(gameMap[m][n].valueFlag &#62; 0
+     && gameMap[m][n].curState == UN_DIG)
+    {
+        gameMap[m][n].curState = DIGGED;
+    }
+
+    if(gameMap[m][n].valueFlag == 0
+     && gameMap[m][n].curState == UN_DIG)
+    {
+        gameMap[m][n].curState = DIGGED;
+        for(int y = -1; y &#60;= 1; y++)
+        {
+            for(int x = -1; x &#60;= 1; x++)
+            {
+                if(m + y &#62;= 0
+                && m + y &#60; mRow
+                && n + x &#62;= 0
+                && n + x &#60; mCol
+                && !(x == 0 && y == 0))
+                {
+                    digMine(m + y, n + x);
+                }
+            }
+        }
+    }
+
+    if(gameMap[m][n].valueFlag == -1)
+    {
+        gameState = OVER;
+        gameMap[m][n].curState = BOMB;
+    }
+
+    checkGame();
+}</code></pre>
+
+    <ul>
+      <li>Recursive mining</li>
+      <li>The user digs to mine until the game is over</li>
+    </ul>
+
+    <h3>(3) Mark the square</h3>
+    <pre><code lang="C++">void GameModel::markMine(int m, int n)
+{
+    if(gameMap[m][n].curState == UN_DIG)
+    {
+        gameMap[m][n].curState = MARKED;
+        mineNumber--;
+        if(gameMap[m][n].valueFlag == -1)
+        {
+            gameMap[m][n].curState = MARKED;
+        }
+        else
+        {
+            gameState = FAULT;
+            gameMap[m][n].curState = WRONG_BOMB;
+        }
+        curMineNumber--;
+    }
+    else if(gameMap[m][n].curState == MARKED || 
+            gameMap[m][n].curState == WRONG_BOMB)
+    {
+        gameMap[m][n].curState = UN_DIG;
+        gameState = PLAYING;
+        curMineNumber++;
+    }
+
+    checkGame();
+}</code></pre>
+
+<ul>
+<li>Mark the mine, and the number of mines currently displayed will decrease</li>
+<li>If the flag is wrong, it will set the game state to FAULT</li>
+<li>If you have finished mining and you have dug correctly, you will win the game</li>
+</ul>
+
+    <h3>(4) Check the game status</h3>
+    <pre><code lang="C++">
+void GameModel::checkGame()
+{
+    if(gameState == OVER)
+    {
+        for(int i = 0; i &#60; mRow; i++)
+        {
+            for(int j = 0; j &#60; mCol; j++)
+            {
+                if(gameMap[i][j].valueFlag == -1)
+                {
+                    gameMap[i][j].curState = BOMB;
+                }
+            }
+        }
+    }
+
+    if(mineNumber == 0)
+    {
+        gameState = WIN;
+    }
+
+    return gameState;
+    }
+
+    if(gameState != FAULT)
+    {
+        for(int i = 0; i &#60; mRow; i++)
+        {
+            for(int j = 0; j &#60; mCol; j++)
+            {
+                if(gameMap[i][j].curState == UN_DIG)
+                {
+                    gameState = PLAYING;
+                    return;
+                }
+            }
+        }
+        gameState = WIN;
+    }
+}</code></pre>
+
+<ul>
+<li>This function needs to be called every time you mine mines and mark mines</li>
+<li>Update game state every time you check</li>
+</ul>
+
+<h2 id="intro">Game interface class</h2>
+The game interface is actually constantly redrawing in the window, and setting the mouse click monitoring
+
+<pre><code lang="C++">
+class MainGameWindow : public QMainWindow
+{
+    Q_OBJECT
+ 
+public:
+    explicit MainGameWindow(QWidget *parent = 0);
+    ~MainGameWindow();
+protected:
+    virtual void paintEvent(QPaintEvent *event);       
+    virtual void mousePressEvent(QMouseEvent *event);  
+private:
+    Ui::MainGameWindow *ui;
+ 
+    GameModel *game;
+    QTimer *timer;    
+    QLabel *timeLabel; 
+ 
+    void handleGameState(GameModel *game); 
+private:
+    void onStartGameClicked();    
+    void onLevelChooseClicked();  
+    void onQuitClicked();         
+    void updateTimer();        
+};
+</code></pre>
+
+<h2 id="intro">Game interface control</h2>
+<h3>(1) Set some elements at startup and initialize the game model</h3>
+
+<pre><code lang="C++">
+MainGameWindow::MainGameWindow(QWidget *parent) :
+    QMainWindow(parent),
+    ui(new Ui::MainGameWindow)
+{
+    ui->setupUi(this);
+
+    timeLabel = new QLabel(this);
+
+    connect(ui->actionStart, SIGNAL(triggered(bool)),
+            this, SLOT(onStartGameClicked()));
+    connect(ui->actionBasic, SIGNAL(triggered(bool)), 
+            this, SLOT(onLevelChooseClicked()));
+    connect(ui->actionMedium, SIGNAL(triggered(bool)), 
+            this, SLOT(onLevelChooseClicked()));
+    connect(ui->actionHard, SIGNAL(triggered(bool)), 
+            this, SLOT(onLevelChooseClicked()));
+    connect(ui->actionQuit, SIGNAL(triggered(bool)), 
+            this, SLOT(onQuitClicked()));
+ 
+    timer = new QTimer(this);
+    connect(timer, SIGNAL(timeout()), this, SLOT(updateTimer()));
+ 
+    game = new GameModel;
+    game->createGame();
+    setFixedSize(game->mCol * blockSize + offsetX * 2, game->mRow * blockSize + offsetY * 2 + spaceY);
+    timeLabel->setGeometry(game->mCol * blockSize + offsetX * 2 - 80, spaceY / 2, 80, 20);
+    timeLabel->setText("Time: " + QString::number(game->timerSeconds) + " s");
+    timer->start(1000);
+}
+</code></pre>
+
+There are some signal slots associated with buttons, the interface and game model are initialized, and a timer is set for game timing.
+
+<h3>(2) Window redraw</h3>
+<pre><code>
+void MainGameWindow::paintEvent(QPaintEvent *event)
+{
+    QPainter painter(this);
+    QPixmap bmpBlocks(":/res/blocks.bmp");
+    QPixmap bmpFaces(":/res/faces.bmp");
+    QPixmap bmpFrame(":/res/frame.bmp");
+    QPixmap bmpNumber(":/res/timenumber.bmp");
+ 
+    switch(game->gameState)
+    {
+    case OVER:
+        painter.drawPixmap((game->mCol * blockSize + offsetX * 2) / 2 - 12, 
+                    spaceY / 2, bmpFaces, 0 * 24, 0, 24, 24);
+        break;
+    case PLAYING:
+        painter.drawPixmap((game->mCol * blockSize + offsetX * 2) / 2 - 12, 
+                    spaceY / 2, bmpFaces, 1 * 24, 0, 24, 24);
+        break;
+    case WIN:
+        painter.drawPixmap((game->mCol * blockSize + offsetX * 2) / 2 - 12, 
+                    spaceY / 2, bmpFaces, 2 * 24, 0, 24, 24);
+        break;
+    default:
+        painter.drawPixmap((game->mCol * blockSize + offsetX * 2) / 2 - 12, 
+                    spaceY / 2, bmpFaces, 1 * 24, 0, 24, 24);
+        break;
+    }
+ 
+    int n = game->curMineNumber;
+    int posX = (game->mCol * blockSize + offsetX * 2) / 2 - 50;
+    if(n <= 0) 
+    {
+        painter.drawPixmap(posX, spaceY / 2, bmpNumber, n * 20, 0, 20, 28);
+    }
+    while(n > 0) 
+    {
+        painter.drawPixmap(posX - 20, spaceY / 2, bmpNumber, n % 10 * 20, 0, 20, 28); 
+        n /= 10;
+        posX -= 20;
+    }
+ 
+    for(int i = 0; i < game->mRow; i++)
+    {
+        for(int j = 0; j < game->mCol; j++)
+        {
+            switch(game->gameMap[i][j].curState)
+            {
+            case UN_DIG:
+                painter.drawPixmap(j * blockSize + offsetX, 
+                  i * blockSize + offsetY + spaceY , 
+                  bmpBlocks, blockSize * 10, 0, 
+                  blockSize, blockSize);
+                break;
+            case DIGGED:
+                painter.drawPixmap(j * blockSize + offsetX, 
+                  i * blockSize + offsetY + spaceY, 
+                  bmpBlocks, blockSize * game->gameMap[i][j].valueFlag, 
+                  0, blockSize, blockSize);
+                break;
+            case MARKED:
+                painter.drawPixmap(j * blockSize + offsetX, 
+                  i * blockSize + offsetY + spaceY, 
+                  bmpBlocks, blockSize * 11, 0, blockSize, blockSize);
+                break;
+            case BOMB:
+                painter.drawPixmap(j * blockSize + offsetX, 
+                  i * blockSize + offsetY + spaceY,   
+                  bmpBlocks, blockSize * 9, 0, blockSize, blockSize);
+                break;
+            case WRONG_BOMB:
+                if(game->gameState == PLAYING ||
+                   game->gameState == FAULT)
+                {
+                    painter.drawPixmap(j * blockSize + offsetX, 
+                      i * blockSize + offsetY + spaceY, 
+                      bmpBlocks, blockSize * 11, 0, blockSize, blockSize);
+                }
+                else if(game->gameState == OVER)
+                {
+                    painter.drawPixmap(j * blockSize + offsetX, 
+                      i * blockSize + offsetY + spaceY,   
+                      bmpBlocks, blockSize * 12, 0, blockSize, blockSize);
+                }
+                break;
+            default:
+                break;
+            }
+        }
+    }
+    handleGameState(game);
+}
+</code></pre>
+
+According to the state of the game, the situation of each block in the game model, and the situation of the timer, targeted redrawing is performed to realize the update of the game interface.
+Bitmap offset drawing is used here.
+
+<h3>(3) Mouse control</h3>
+<pre><code>
+void MainGameWindow::mousePressEvent(QMouseEvent *event)
+{
+    if(event->y() &#60; spaceY + offsetY)
+    {
+        int x = event-&#62;x();
+        int y = event-&#62;y();
+
+        if(x &#62;= (game->mCol * blockSize + offsetX * 2) / 2 - 12
+        && x &#60;= (game->mCol * blockSize + offsetX * 2) / 2 + 12
+        && y &#62;= spaceY / 2
+        && y &#60;= spaceY / 2 + 24)
+        {
+            game-&#62;restartGame(); // 重玩
+            timer-&#62;start(1000);
+            timeLabel-&#62;setText("Time: " + 
+                               QString::number(game-&#62;timerSeconds) + " s");
+            update();
+        }
+    }
+    else if(game-&#62;gameState != OVER && game-&#62;gameState != WIN)
+    {
+        int px = event-&#62;x() - offsetX;
+        int py = event-&#62;y() - offsetY - spaceY;
+        
+        int row = py / blockSize;
+        int col = px / blockSize;
+
+        switch(event-&#62;button())
+        {
+        case Qt::LeftButton:
+            game-&#62;digMine(row, col);
+            update();
+            break;
+        case Qt::RightButton:
+            game-&#62;markMine(row, col);
+            update();
+            break;
+        default:
+            break;
+        }
+    }
+}
+</code></pre>
+
+Do a simple collision detection, left-click to dig mines, right-click to mark.
+
+<h3>(4) Choose the difficulty</h3>
+
+<pre><code lang="C++">
+void MainGameWindow::onLevelChooseClicked()
+{
+    QAction *actionSender = 
+        (QAction *)dynamic_cast&#60;QAction *&#62;(sender());
+    if(actionSender == ui-&#62;actionBasic)
+    {
+        qDebug() &#60;&#60; "basic";
+        game-&#62;createGame(8, 10, 15, BASIC);
+    }
+    else if(actionSender == ui-&#62;actionMedium)
+    {
+        qDebug() &#60;&#60; "medium";
+        game-&#62;createGame(15, 20, 50, MEDIUM);
+    }
+    else if(actionSender == ui->actionHard)
+    {
+        qDebug() &#60;&#60; "hard";
+        game-&#62;createGame(20, 30, 100, HARD);
+    }
+
+    timer-&#62;start(1000);
+
+    timeLabel-&#62;setText("Time: " +
+                       QString::number(game-&#62;timerSeconds) + " s");
+    timeLabel-&#62;setGeometry(game-&#62;mCol * 
+                           blockSize + offsetX * 2 - 80, spaceY / 2, 80, 20);
+    setFixedSize(game-&#62;mCol * blockSize + offsetX * 2, 
+                 game-&#62;mRow * blockSize + offsetY * 2 + spaceY);
+}
+</code></pre>
+
+In the selection of difficulty, you can set different difficulty according to the type of signal in the signal slot, and directly set the parameters for the game, which is convenient and fast.
+
+<h3>(5) Timing</h3>
+<pre><code lang="C++">
+void MainGameWindow::updateTimer()
+{
+    game-&#62;timerSeconds++;
+    timeLabel-&#62;setText("Time: " + QString::number(game-&#62;timerSeconds) 
+                                                      + " s");
+    qDebug() &#60;&#60; game-&#62;timerSeconds;
+}
+</code></pre>
+
+You can see the timing score at the end of the game
+
+    <p class="license">Copyright &copy; 2016 by David Godfrey</p>
+</div>
+
+</body>
+</html>
+
